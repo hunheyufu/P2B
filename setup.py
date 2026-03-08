@@ -2,6 +2,8 @@ from __future__ import division, absolute_import, with_statement, print_function
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 import glob
+import os
+import torch
 
 try:
     import builtins
@@ -18,6 +20,18 @@ _ext_sources = glob.glob("{}/src/*.cpp".format(_ext_src_root)) + glob.glob(
 _ext_headers = glob.glob("{}/include/*".format(_ext_src_root))
 
 requirements = ["etw_pytorch_utils==1.1.1", "h5py", "pprint", "enum34", "future"]
+
+if not os.environ.get("TORCH_CUDA_ARCH_LIST"):
+    arch_list = []
+    try:
+        if torch.cuda.is_available():
+            major, minor = torch.cuda.get_device_capability()
+            arch_list = ["{}.{}".format(major, minor)]
+    except Exception:
+        arch_list = []
+    if not arch_list:
+        arch_list = ["7.5", "8.0", "8.6", "8.9", "9.0"]
+    os.environ["TORCH_CUDA_ARCH_LIST"] = ";".join(arch_list)
 
 setup(
     name="pointnet2",

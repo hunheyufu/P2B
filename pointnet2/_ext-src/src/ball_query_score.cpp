@@ -29,7 +29,7 @@ at::Tensor ball_query_score(at::Tensor new_xyz, at::Tensor xyz, at::Tensor score
                                     radius, nsample, new_xyz.data<float>(),
                                     xyz.data<float>(), score.data<float>(), unique_score.data<float>());
   } else {
-    AT_CHECK(false, "CPU not supported");
+    TORCH_CHECK(false, "CPU not supported");
   }
 
   return unique_score;

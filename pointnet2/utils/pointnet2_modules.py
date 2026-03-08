@@ -8,6 +8,9 @@ from __future__ import (
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from pointnet2.utils.torch_compat import ensure_torch_six
+
+ensure_torch_six()
 import etw_pytorch_utils as pt_utils
 
 from pointnet2.utils import pointnet2_utils

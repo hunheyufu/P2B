@@ -1,4 +1,6 @@
-pointnet2
-model
-build
+__pycache__/
+build/
+model/
 *.pyc
+*.so
+.vscode/
