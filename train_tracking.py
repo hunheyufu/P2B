@@ -22,10 +22,10 @@ from Dataset import SiameseTrain
 from pointnet2.models import Pointnet_Tracking
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batchSize', type=int, default=48, help='input batch size')
+parser.add_argument('--batchSize', type=int, default=2, help='input batch size')
 parser.add_argument('--workers', type=int, default=0, help='number of data loading workers')
 parser.add_argument('--nepoch', type=int, default=60, help='number of epochs to train for')
-parser.add_argument('--ngpu', type=int, default=2, help='# GPUs')
+parser.add_argument('--ngpu', type=int, default=1, help='# GPUs')
 parser.add_argument('--learning_rate', type=float, default=0.001, help='learning rate at t=0')
 parser.add_argument('--input_feature_num', type=int, default = 0,  help='number of input point features')
 parser.add_argument('--data_dir', type=str, default = './data/training',  help='dataset path')
@@ -37,12 +37,16 @@ parser.add_argument('--optimizer', type=str, default = '',  help='optimizer name
 opt = parser.parse_args()
 print (opt)
 
-#torch.cuda.set_device(opt.main_gpu)
-os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
-
 opt.manualSeed = 1
 random.seed(opt.manualSeed)
 torch.manual_seed(opt.manualSeed)
+
+available_gpus = torch.cuda.device_count()
+if available_gpus == 0:
+		raise RuntimeError("train_tracking.py requires at least one CUDA device")
+if opt.ngpu > available_gpus:
+		logging.warning('Requested %d GPUs but only %d available; reducing ngpu.', opt.ngpu, available_gpus)
+		opt.ngpu = available_gpus
 
 save_dir = opt.save_root_dir
 

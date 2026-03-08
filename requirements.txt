@@ -9,6 +9,7 @@ pandas
 shapely
 matplotlib
 pomegranate
+scikit-learn
 ipykernel
 jupyter
 imageio

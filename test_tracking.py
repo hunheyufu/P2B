@@ -159,8 +159,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print (args)
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1,2'
-
     logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%Y/%m/%d %H:%M:%S', \
                     filename=os.path.join(args.save_root_dir, datetime.now().strftime('%Y-%m-%d %H-%M-%S.log')), level=logging.INFO)
     logging.info('======================================================')
@@ -168,6 +166,13 @@ if __name__ == '__main__':
     args.manualSeed = 1
     random.seed(args.manualSeed)
     torch.manual_seed(args.manualSeed)
+
+    available_gpus = torch.cuda.device_count()
+    if available_gpus == 0:
+        raise RuntimeError("test_tracking.py requires at least one CUDA device")
+    if args.ngpu > available_gpus:
+        logging.warning('Requested %d GPUs but only %d available; reducing ngpu.', args.ngpu, available_gpus)
+        args.ngpu = available_gpus
 
     netR = Pointnet_Tracking(input_channels=0, use_xyz=True)
     if args.ngpu > 1:

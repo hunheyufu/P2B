@@ -16,8 +16,26 @@ class kittiDataset():
 
     def __init__(self, path):
         self.KITTI_Folder = path
-        self.KITTI_velo = os.path.join(self.KITTI_Folder, "velodyne")
-        self.KITTI_label = os.path.join(self.KITTI_Folder, "label_02")
+        self.KITTI_velo = self._resolve_data_path("velodyne")
+        self.KITTI_label = self._resolve_data_path("label_02")
+        self.KITTI_calib = self._resolve_data_path("calib")
+
+    def _resolve_data_path(self, dirname):
+        base_dir = os.path.join(self.KITTI_Folder, dirname)
+        nested_training_dir = os.path.join(base_dir, "training", dirname)
+
+        if os.path.isdir(nested_training_dir):
+            return nested_training_dir
+        return base_dir
+
+    def _list_scene_directories(self):
+        if not os.path.isdir(self.KITTI_velo):
+            return []
+
+        return sorted([
+            path for path in os.listdir(self.KITTI_velo)
+            if path.isdigit() and os.path.isdir(os.path.join(self.KITTI_velo, path))
+        ])
 
     def getSceneID(self, split):
         if "TRAIN" in split.upper():  # Training SET
@@ -41,8 +59,7 @@ class kittiDataset():
         return sceneID
 
     def getBBandPC(self, anno):
-        calib_path = os.path.join(self.KITTI_Folder, 'calib',
-                                  anno['scene'] + ".txt")
+        calib_path = os.path.join(self.KITTI_calib, anno['scene'] + ".txt")
         calib = self.read_calib_file(calib_path)
         transf_mat = np.vstack((calib["Tr_velo_cam"], np.array([0, 0, 0, 1])))
         PC, box = self.getPCandBBfromPandas(anno, transf_mat)
@@ -50,9 +67,7 @@ class kittiDataset():
 
     def getListOfAnno(self, sceneID, category_name="Car"):
         list_of_scene = [
-            path for path in os.listdir(self.KITTI_velo)
-            if os.path.isdir(os.path.join(self.KITTI_velo, path)) and
-            int(path) in sceneID
+            path for path in self._list_scene_directories() if int(path) in sceneID
         ]
         # print(self.list_of_scene)
         list_of_tracklet_anno = []

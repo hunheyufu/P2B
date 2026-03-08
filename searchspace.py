@@ -1,6 +1,13 @@
 import numpy as np
-from pomegranate import MultivariateGaussianDistribution, GeneralMixtureModel
 import logging
+
+try:
+    from pomegranate import MultivariateGaussianDistribution, GeneralMixtureModel
+except ImportError:
+    MultivariateGaussianDistribution = None
+    GeneralMixtureModel = None
+
+from sklearn.mixture import GaussianMixture
 
 
 class SearchSpace(object):
@@ -113,45 +120,58 @@ class GaussianMixtureModel(SearchSpace):
         self.dim = dim
         self.reset(n_comp)
 
+    def _sample_gaussian(self, mean, cov, n):
+        n = max(int(n), 1)
+        return np.atleast_2d(
+            np.random.multivariate_normal(np.asarray(mean), np.asarray(cov), size=n))
+
+    def _set_default_model(self, mean, cov):
+        self.model = None
+        self.model_mean = np.asarray(mean)
+        self.model_cov = np.asarray(cov)
+        self.model_backend = "gaussian"
+
+    def _sample_model(self, n):
+        n = max(int(n), 1)
+        if self.model_backend == "pomegranate" and self.model is not None:
+            return np.stack(self.model.sample(n))
+        if self.model_backend == "sklearn" and self.model is not None:
+            return self.model.sample(n)[0]
+        return self._sample_gaussian(self.model_mean, self.model_cov, n)
+
     def sample(self, n=10):
         try:
-            X1 = np.stack(self.model.sample(int(np.round(0.8 * n))))
+            X1 = self._sample_model(int(np.round(0.8 * n)))
             if self.dim == 2:
                 mean = np.mean(X1, axis=0)
                 std = np.diag([1.0, 1.0])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X2 = np.stack(gmm.sample(int(np.round(0.1 * n))))
+                X2 = self._sample_gaussian(mean, std, int(np.round(0.1 * n)))
 
                 mean = np.mean(X1, axis=0)
                 std = np.diag([1e-3, 1e-3])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X3 = np.stack(gmm.sample(int(np.round(0.1 * n))))
+                X3 = self._sample_gaussian(mean, std, int(np.round(0.1 * n)))
 
             else:
                 mean = np.mean(X1, axis=0)
                 std = np.diag([1.0, 1.0, 1e-3])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X2 = np.stack(gmm.sample(int(np.round(0.1 * n))))
+                X2 = self._sample_gaussian(mean, std, int(np.round(0.1 * n)))
 
                 mean = np.mean(X1, axis=0)
                 std = np.diag([1e-3, 1e-3, 10.0])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X3 = np.stack(gmm.sample(int(np.round(0.1 * n))))
+                X3 = self._sample_gaussian(mean, std, int(np.round(0.1 * n)))
 
             X = np.concatenate((X1, X2, X3))
 
         except ValueError:
-            print("exception caught on sampling")
+            logging.info("exception caught on sampling")
             if self.dim == 2:
                 mean = np.zeros(self.dim)
                 std = np.diag([1.0, 1.0])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X = gmm.sample(int(n))
+                X = self._sample_gaussian(mean, std, int(n))
             else:
                 mean = np.zeros(self.dim)
                 std = np.diag([1.0, 1.0, 5.0])
-                gmm = MultivariateGaussianDistribution(mean, std)
-                X = gmm.sample(int(n))
+                X = self._sample_gaussian(mean, std, int(n))
         return X
 
     def addData(self, data, score):
@@ -160,14 +180,37 @@ class GaussianMixtureModel(SearchSpace):
         self.score = score
 
         score_normed = self.score / np.linalg.norm(self.score, ord=1)
+        if len(self.data) == 0:
+            return
+
+        if (GeneralMixtureModel is not None and
+                MultivariateGaussianDistribution is not None):
+            try:
+                model = GeneralMixtureModel.from_samples(
+                    MultivariateGaussianDistribution,
+                    n_components=self.n_comp,
+                    X=self.data,
+                    weights=score_normed)
+                self.model = model
+                self.model_backend = "pomegranate"
+                return
+            except Exception:
+                logging.info("failed to fit pomegranate GMM, falling back to sklearn")
+
         try:
-            model = GeneralMixtureModel.from_samples(
-                MultivariateGaussianDistribution,
-                n_components=self.n_comp,
-                X=self.data,
-                weights=score_normed)
+            sample_count = max(len(self.data), self.n_comp * 20)
+            indices = np.random.choice(
+                len(self.data), size=sample_count, replace=True, p=score_normed)
+            sampled_data = self.data[indices]
+            model = GaussianMixture(
+                n_components=min(self.n_comp, len(sampled_data)),
+                covariance_type='full',
+                reg_covar=1e-6,
+                random_state=0)
+            model.fit(sampled_data)
             self.model = model
-        except:
+            self.model_backend = "sklearn"
+        except Exception:
             logging.info("catched an exception")
 
     def reset(self, n_comp=5):
@@ -180,8 +223,6 @@ class GaussianMixtureModel(SearchSpace):
         self.score = np.ones(np.shape(self.data)[0])
         self.score = self.score / np.linalg.norm(self.score, ord=1)
         if self.dim == 2:
-            self.model = MultivariateGaussianDistribution(
-                np.zeros(self.dim), np.diag([1.0, 1.0]))
+            self._set_default_model(np.zeros(self.dim), np.diag([1.0, 1.0]))
         else:
-            self.model = MultivariateGaussianDistribution(
-                np.zeros(self.dim), np.diag([1.0, 1.0, 5.0]))
+            self._set_default_model(np.zeros(self.dim), np.diag([1.0, 1.0, 5.0]))
