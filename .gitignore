@@ -1,6 +1,7 @@
 __pycache__/
 build/
 model/
+KITTI/
 *.pyc
 *.so
 .vscode/
